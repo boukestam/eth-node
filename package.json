@@ -1,0 +1,31 @@
+{
+  "name": "eth-node",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.ts",
+  "scripts": {
+    "start": "ts-node main.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/elliptic": "^6.4.14",
+    "@types/ip": "^1.1.0",
+    "@types/keccak": "^3.0.1",
+    "@types/secp256k1": "^4.0.3",
+    "bitwise-buffer": "^1.0.2",
+    "bn.js": "^5.2.0",
+    "ecies-geth": "^1.6.1",
+    "elliptic": "^6.5.4",
+    "ip": "^1.1.5",
+    "keccak": "^3.0.2",
+    "secp256k1": "^4.0.3",
+    "standard-ecies": "^2.0.0",
+    "ts-node": "^10.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.8",
+    "tslib": "^2.3.1",
+    "typescript": "^4.5.4"
+  }
+}
