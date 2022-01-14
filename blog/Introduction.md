@@ -41,8 +41,8 @@ I can then run it with ```ts-node main.ts```. Now we can get started on the actu
 
 ### Chapters
 
-1. [Node Discovery Protocol](Node Discovery Protocol.md)
-2. [RLP Encoding](RLP Encoding.md)
-3. [Kademlia Table](Kademlia Table.md)
-4. [RLPx Transport Protocol](RLPx Transport Protocol.md)
+1. [Node Discovery Protocol](Node%20Discovery%20Protocol.md)
+2. [RLP Encoding](RLP%20Encoding.md)
+3. [Kademlia Table](Kademlia%20Table.md)
+4. [RLPx Transport Protocol](RLPx%20Transport%20Protocol.md)
 
