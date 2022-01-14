@@ -1,12 +1,12 @@
 # Introduction
 
-This is the first post in a series on writing an Ethereum node from scratch. I'm the kind of person that understands things by trying to recreate it for myself. For that reason I decided to finally tackle a big unknown: the Ethereum network. 
+This is the first post in a series on writing an Ethereum node from scratch. I want to do this because I'm the kind of person that understands things by trying to recreate it for myself. For that reason I decided to finally tackle one of the biggest mysteries to me. 
 
-I've been working as a blockchain developer for 1.5 years now, but honestly it's inner workings are still a big mystery to me. How do nodes talk to each other and collectively decide on the 'true' chain? How does all the cryptography actually work? What happens when I store a variable?
+I've been working as a blockchain developer for 1.5 years now, but honestly it's inner workings are still a big mystery to me. How do nodes talk to each other and collectively come to a consensus? How does all the cryptography actually work? What happens when I store a variable?
 
 ### The goal
 
-The goal is to learn about all the different aspects that make the Ethereum network work. The goal is **not** to create the most optimized Ethereum node. I will start out creating everything in the most simple way and only optimize where needed. Throughout the project I will dive in head-first and try to tackle the hurdles as they come.
+The goal is to learn about all the different aspects that make the Ethereum network work. The goal is **not** to create the most optimized, stable Ethereum node. I will start out creating everything in the most simple way and only optimize and handle errors where needed. Throughout the project I will dive in head-first and try to tackle the hurdles as they come.
 
 ### The plan
 
@@ -14,10 +14,24 @@ With this project I try to answer all these questions, and hopefully help others
 
 - use Node.js/Typescript as programming language because I am familiar with it
 - try to use as few libraries as possible
-- use the [Ethereum Yellow Paper](https://ethereum.github.io/yellowpaper/paper.pdf) as reference
+- use the [Ethereum Yellow Paper](https://ethereum.github.io/yellowpaper/paper.pdf) and [Ethereum documentation](https://github.com/ethereum) as reference
 - start as simple as possible and build out from there
 
 Some of you might question the decision to use NodeJS and Typescript for this project. But I think it will help me and others understand the code more easily since many people are familiar with it.
+
+### Prior knowledge
+
+I already have a vague high-level idea about how the blockchain works. This will definitely steer me in some directions so I think it's good to explain what I already know:
+
+- the EVM (Ethereum Virtual Machine) is the processor at the core of Ethereum
+- the EVM processes transactions that interact with smart contracts
+- transactions can read or write from a special kind of memory called the 'state'
+- transactions are grouped up in blocks
+- blocks are chained together in a blockchain and depend on each other
+- consensus about which chain is the correct one is reached through a network of nodes
+- the nodes talk to each other to share information
+
+I don't really have any idea how any of this works under the hood though. But looking at this we have basically two ways to start out, at the top of the list (the EVM) or the bottom (the network). I think it's best to start with the network so we can immediately start working with real data and real interactions.
 
 ### Setup
 
