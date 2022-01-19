@@ -20,6 +20,7 @@ export class Peer extends EventEmitter {
 
   verified: boolean;
   queried: boolean;
+  pingTime: number;
 
   constructor (privateKey: Buffer, initiatorEndpoint: Endpoint, receiverEndpoint: Endpoint, socket: Socket) {
     super();
@@ -56,6 +57,8 @@ export class Peer extends EventEmitter {
         encodeExpiration()
       ]))
     );
+
+    this.pingTime = Date.now();
   }
 
   async pong (hash: Buffer) {
@@ -68,10 +71,10 @@ export class Peer extends EventEmitter {
     );
   }
 
-  async findNode () {
+  async findNodes (target: Buffer) {
     await this.send(
       encodePacket(this.privateKey, 0x03, rlpEncode([
-        this.initiatorEndpoint.id,
+        target,
         encodeExpiration()
       ]))
     );
@@ -86,14 +89,13 @@ export class Peer extends EventEmitter {
       this.emit('verified');
     } else if (packet.packetType === 0x02) { // Pong
       const [to, pingHash,  expiration] = data as [Buffer[], Buffer, Buffer];
-
     } else if (packet.packetType === 0x04) { // Neighbors
       const [nodes, expiration] = data as [Buffer[][], Buffer];
 
       for (const node of nodes) {
         const endpoint: Endpoint = {
           id: node[3],
-          ip: node[0].join('.'),
+          ip: node[0].slice(-4).join('.'),
           udpPort: bufferToNumber(node[1]),
           tcpPort: bufferToNumber(node[2])
         };

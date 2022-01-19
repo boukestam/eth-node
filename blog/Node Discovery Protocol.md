@@ -2,20 +2,20 @@
 
 The first step is to actually find some nodes that we can connect to. This process is defined as the [Node Discovery Protocol](https://github.com/ethereum/devp2p/blob/master/discv4.md). The process goes like this:
 
-1. Connect to node with UDP
+1. Connect to a node with UDP
 2. Send ping
 3. Receive pong
-4. Ask for nodes
+4. Ask for nodes close to me
 5. Receive neighbor nodes
 6. Go back to step 1 for all neighbors until we have enough nodes
 
-To start of this process we need to know at least one node that we can connect with. These starting nodes are called ```bootstrap nodes```. There is a list of them in the [go-ethereum repository](https://github.com/ethereum/go-ethereum/blob/master/params/bootnodes.go). The address for a node in that repo looks this:
+To start this process we need to know at least one node that we can connect with. These starting nodes are called ```bootstrap nodes```. There is a list of them in the [go-ethereum repository](https://github.com/ethereum/go-ethereum/blob/master/params/bootnodes.go). The address for a node in that repo looks this:
 
 ```
 "enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"
 ```
 
-The long hex string is the ID of the node. To go from the ID to the public key we just prepend ```04``` to the ID. More information about the enode url format can be found [here](https://eth.wiki/en/fundamentals/enode-url-format). According to the Discovery Protocol documentation all nodes have these 4 attributes:
+The long hex string is the ID of the node. The part after the @ symbol contains the ip address and port. More information about the enode url format can be found [here](https://eth.wiki/en/fundamentals/enode-url-format). According to the Discovery Protocol documentation all nodes have these 4 attributes:
 
 ```
 [ip, udp-port, tcp-port, node-id]

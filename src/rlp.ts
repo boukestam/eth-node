@@ -1,7 +1,4 @@
-export type RLPItem = Buffer | Buffer[];
-export type RLPList = RLPItem[];
-
-export function rlpEncode (input: RLPItem | RLPList): Buffer {
+export function rlpEncode (input: any): Buffer {
   const toBinary = (x: number): Uint8Array => x === 0 ? new Uint8Array() :
     Buffer.concat([
       toBinary(Math.floor(x / 256)), 
@@ -27,11 +24,11 @@ export function rlpEncode (input: RLPItem | RLPList): Buffer {
   return Buffer.concat([encodeLength(output.length, 0xc0), output]);
 }
 
-export function rlpDecode(input: Buffer): RLPItem {
+export function rlpDecode(input: Buffer) {
   return _rlpDecode(input, [])[0];
 }
 
-function _rlpDecode(input: Buffer, list: RLPList) {
+function _rlpDecode(input: Buffer, list: any) {
   while (input.length > 0) {
     const [offset, dataLength, type] = decodeLength(input);
     const data = input.slice(offset, offset + dataLength);
@@ -70,8 +67,6 @@ function decodeLength (input: Buffer) {
     const listLength = toInteger(input.slice(1, 1 + lengthOfListLength));
     return [1 + lengthOfListLength, listLength, 'list'];
   } else {
-    console.log(prefix, length);
-    console.log(input.toString('hex'))
     throw new Error('input doesn\'t confirm to RLP encoding form');
   }
 }

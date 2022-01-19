@@ -11,6 +11,7 @@ import * as rlp from 'rlp';
 import { compressSync, uncompressSync } from 'snappy';
 import { BN } from 'bn.js';
 import { Peer } from './peer';
+import EventEmitter from 'events';
 
 const DISCONNECT_REASONS = {
   0x00:	"Disconnect requested",
@@ -28,11 +29,13 @@ const DISCONNECT_REASONS = {
   0x10:	"Some other reason specific to a subprotocol"
 };
 
-export class RLPxPeer {
-
-  peer: Peer;
+export class RLPxPeer extends EventEmitter {
 
   privateKey: Buffer;
+  
+  initiatorEndpoint: Endpoint;
+  receiverEndpoint: Endpoint
+
   buffer: Buffer;
   socket: net.Socket;
   state: 'auth' | 'header' | 'body';
@@ -40,25 +43,35 @@ export class RLPxPeer {
   bodySize: number;
   verified: boolean;
 
+  incoming: boolean;
+
   eceis: ECIES;
 
-  constructor (privateKey: Buffer, peer: Peer) {
+  constructor (privateKey: Buffer, initiatorEndpoint: Endpoint, receiverEndpoint: Endpoint, socket?: net.Socket) {
+    super();
+
     this.buffer = Buffer.from([]);
+
     this.privateKey = privateKey;
+    this.initiatorEndpoint = initiatorEndpoint;
+    this.receiverEndpoint = receiverEndpoint;
+
     this.state = 'auth';
     this.closed = false;
     this.verified = false;
 
-    this.peer = peer;
+    this.incoming = !!socket;
 
-    this.eceis = new ECIES(privateKey, peer.initiatorEndpoint.id, peer.receiverEndpoint.id);
+    this.eceis = new ECIES(privateKey, initiatorEndpoint.id, receiverEndpoint.id);
 
-    this.socket = new net.Socket();
+    this.socket = socket || new net.Socket();
 
-    this.socket.connect(peer.receiverEndpoint.tcpPort, peer.receiverEndpoint.ip, () => {
-      const auth = this.eceis.createAuthEIP8();
-      this.socket.write(auth);
-    });
+    if (!this.incoming) {
+      this.socket.connect(receiverEndpoint.tcpPort, receiverEndpoint.ip, () => {
+        const auth = this.eceis.createAuthEIP8();
+        this.socket.write(auth);
+      });
+    }
 
     this.socket.on('data', (data) => {
       this.buffer = Buffer.concat([this.buffer, data]);
@@ -78,18 +91,16 @@ export class RLPxPeer {
     });
 
     this.socket.on('error', (error) => {
-      console.log('Closed with error ' + error);
-      this.closed = true;
+      this.close(error);
     });
 
     this.socket.on('close', (error) => {
-      console.log('Closed with error ' + error);
-      this.closed = true;
+      this.close(error);
     });
   }
 
   send (code: number, data: Buffer, compress: boolean) {
-    if (this.closed) return console.error('Socket already closed');
+    if (this.closed) return;
 
     const msg = Buffer.concat([rlp.encode(code), compress ? compressSync(data) : data]);
 
@@ -107,44 +118,46 @@ export class RLPxPeer {
       [
         [Buffer.from('eth', 'ascii'), intToBuffer(66)]
       ],
-      intToBuffer(this.peer.initiatorEndpoint.tcpPort),
-      this.peer.initiatorEndpoint.id
+      intToBuffer(this.initiatorEndpoint.tcpPort),
+      this.initiatorEndpoint.id
     ]), false);
   }
 
-  sendStatus () {
-    console.log('Send status');
-
-    this.send(0x10, rlp.encode([
-      intToBuffer(66),
-      intToBuffer(1),
-      new BN('17179869184').toBuffer(),
-      Buffer.from('d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3', 'hex'),
-      Buffer.from('d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3', 'hex'),
-      [
-        Buffer.from('20c327fc', 'hex'),
-        Buffer.alloc(0)
-      ]
-    ]), true);
+  close (error?: any) {
+    this.closed = true;
+    this.emit('close');
   }
 
   disconnect (reason: number) {
     this.send(0x01, rlp.encode([
       intToBuffer(reason)
     ]), true);
+    this.close();
+  }
+
+  idString () {
+    return this.receiverEndpoint.id.toString('hex');
   }
 
   parse (): number {
     if (this.state === 'auth') {
-      const ackSizeBuffer = this.buffer.slice(0, 2);
-      const ackSize = bufferToInt(ackSizeBuffer);
+      const sizeBuffer = this.buffer.slice(0, 2);
+      const size = bufferToInt(sizeBuffer);
+      const data = this.buffer.slice(0, size + 2);
 
-      this.eceis.parseAckEIP8(this.buffer.slice(0, ackSize + 2));
+      if (this.incoming) {
+        this.eceis.parseAuthEIP8(data);
+
+        const ack = this.eceis.createAckEIP8();
+        this.socket.write(ack);
+      } else {
+        this.eceis.parseAckEIP8(data);
+      }
 
       this.state = 'header';
       process.nextTick(() => this.sendHello());
 
-      return ackSize + 2;
+      return size + 2;
     } else if (this.state === 'header') {
       this.bodySize = this.eceis.parseHeader(this.buffer.slice(0, 32)) + 16;
       if (this.bodySize % 16 > 0) this.bodySize += 16 - this.bodySize % 16;
@@ -166,25 +179,20 @@ export class RLPxPeer {
       if (code === 0x00) { // hello
         const [version, clientId, capabilities, listenPort, nodeId] = data as [Buffer, Buffer, Buffer[][], Buffer, Buffer]
 
+        this.receiverEndpoint.id = nodeId;
+        this.receiverEndpoint.tcpPort = bufferToInt(listenPort);
+
         if (capabilities.some(c => c[0].toString('ascii') === 'eth' && bufferToInt(c[1]) == 66)) {
           // supports eth 66
+          this.emit('eth');
         } else {
-          console.log('No support for eth 66');
           this.disconnect(0x10);
         }
       } else if (code === 0x01) { // disconnect
-        console.log('Disconnect for reason', DISCONNECT_REASONS[bufferToInt(data[0])]);
         this.socket.destroy();
         this.closed = true;
-      } else if (code === 0x10) { // eth status
-        const [version, networkId, totalDifficulty, blockHash, genesis, forkId] = data as [Buffer, Buffer, Buffer, Buffer, Buffer, Buffer];
-
-        if (bufferToInt(version) === 66 && bufferToInt(networkId) === 1) {
-          this.verified = true;
-          process.nextTick(() => this.sendStatus());
-        } else {
-          this.disconnect(0x10);
-        }
+      } else if (code >= 0x10) {
+        this.emit('message', code - 0x10, data);
       } else {
         console.log('Unhandled code', code);
       }

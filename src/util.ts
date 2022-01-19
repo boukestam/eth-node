@@ -1,6 +1,7 @@
-import secp256k1 from 'secp256k1';
+import secp256k1, { publicKeyConvert } from 'secp256k1';
 import crypto from 'crypto';
 import createKeccakHash from 'keccak';
+import * as rlp from 'rlp';
 
 export function generatePrivateKey (): Buffer {
   while (true) {
@@ -17,21 +18,64 @@ export function printBytes (s: string, x: Uint8Array): void {
   console.log(s, x.length, x);
 }
 
-export function intToBuffer (v: number): Buffer {
+// export function int16ToBuffer (n: number): Buffer {
+//   return Buffer.from(new Int16Array([n]));
+// }
+
+// export function uint16ToBuffer (n: number): Buffer {
+//   return Buffer.from(new Uint16Array([n]));
+// }
+
+export function keccak256 (...buffers) {
+  const buffer = Buffer.concat(buffers)
+  return createKeccakHash('keccak256').update(buffer).digest()
+}
+
+export function idToPK (id: Buffer) {
+  return Buffer.concat([Buffer.from([0x04]), id]);
+}
+
+export function pkToId (pk: Buffer) {
+  if (pk.length === 33) {
+    pk = Buffer.from(publicKeyConvert(pk, false));
+  }
+  return pk.slice(1);
+}
+
+export function intToBuffer (v: number) {
   let hex = v.toString(16)
   if (hex.length % 2 === 1) hex = '0' + hex
   return Buffer.from(hex, 'hex')
 }
 
-export function int16ToBuffer (n: number): Buffer {
-  return Buffer.from(new Int16Array([n]));
+export function bufferToInt (buffer: Buffer) {
+  if (buffer.length === 0) return NaN
+
+  let n = 0
+  for (let i = 0; i < buffer.length; ++i) n = n * 256 + buffer[i]
+  return n
 }
 
-export function uint16ToBuffer (n: number): Buffer {
-  return Buffer.from(new Uint16Array([n]));
+export function assertEq(expected: any, actual: any, msg: string): void {
+  if (Buffer.isBuffer(expected) && Buffer.isBuffer(actual)) {
+    if (expected.equals(actual)) return;
+    throw new Error(`${msg}: ${expected.toString('hex')} / ${actual.toString('hex')}`);
+  }
+
+  if (expected === actual) return;
+
+  throw new Error(`${msg}: ${expected} / ${actual}`);
 }
 
-export function keccak256 (...buffers) {
-  const buffer = Buffer.concat(buffers)
-  return createKeccakHash('keccak256').update(buffer).digest()
+export function zfill(buffer: Buffer, size: number, leftpad: boolean = true): Buffer {
+  if (buffer.length >= size) return buffer
+  if (leftpad === undefined) leftpad = true
+  const pad = Buffer.allocUnsafe(size - buffer.length).fill(0x00)
+  return leftpad ? Buffer.concat([pad, buffer]) : Buffer.concat([buffer, pad])
+}
+
+export function unstrictDecode(value: Buffer) {
+  // rlp library throws on remainder.length !== 0
+  // this utility function bypasses that
+  return (rlp.decode(value, true) as any).data
 }

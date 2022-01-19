@@ -54,7 +54,7 @@ export class KademliaTable<T> {
             return true;
           }
         }
-  
+        
         return false;
       } else {
         if (bucket.length === K) {
@@ -65,6 +65,8 @@ export class KademliaTable<T> {
         }
       }
     }
+
+    throw new Error('Error in table');
   }
 
   get (id: Buffer): T | null {
