@@ -1,6 +1,5 @@
 import crypto, { Decipher } from 'crypto';
 import secp256k1 from 'secp256k1';
-import { rlpDecode, rlpEncode } from './rlp';
 import { bufferToInt, generatePrivateKey, idToPK, intToBuffer, keccak256, printBytes, unstrictDecode, zfill } from './util';
 import {xor} from 'bitwise-buffer';
 import { ECIES } from './ecies';
@@ -46,6 +45,8 @@ export class RLPxPeer extends EventEmitter {
   incoming: boolean;
 
   eceis: ECIES;
+
+  timeout: number;
 
   constructor (privateKey: Buffer, initiatorEndpoint: Endpoint, receiverEndpoint: Endpoint, socket?: net.Socket) {
     super();
@@ -191,6 +192,9 @@ export class RLPxPeer extends EventEmitter {
       } else if (code === 0x01) { // disconnect
         this.socket.destroy();
         this.closed = true;
+        //console.log('Disconnected', DISCONNECT_REASONS[bufferToInt(data[0])]);
+      } else if (code === 0x02) { // ping
+        this.send(0x03, rlp.encode([]), true);
       } else if (code >= 0x10) {
         this.emit('message', code - 0x10, data);
       } else {

@@ -65,8 +65,6 @@ export class KademliaTable<T> {
         }
       }
     }
-
-    throw new Error('Error in table');
   }
 
   get (id: Buffer): T | null {

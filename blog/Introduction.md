@@ -59,4 +59,6 @@ I can then run it with ```ts-node main.ts```. Now we can get started on the actu
 2. [RLP Encoding](RLP%20Encoding.md)
 3. [Kademlia Table](Kademlia%20Table.md)
 4. [RLPx Transport Protocol](RLPx%20Transport%20Protocol.md)
-
+5. [Ethereum Wire Protocol](Ethereum%20Wire%20Protocol.md)
+6. [Chain synchronization](Chain%20synchronization.md)
+7. [Merkle Patricia Tree](Merkle%20Patricia%20Trie.md)

@@ -34,15 +34,28 @@ export class Server {
     
     this.socket.on('message', (msg, info) => {
       const packet = decodePacket(msg);
-      const peer = this.table.get(packet.publicKey.slice(1));
+      let peer = this.table.get(packet.publicKey.slice(1));
     
       if (peer) {
         peer.onMessage(packet).catch(e => {
           console.error(e);
         });
       } else {
-        console.log('Unknown peer');
-        console.log(packet.publicKey.slice(1).toString('hex'));
+        const endpoint = {
+          id: packet.publicKey.slice(1),
+          ip: info.address,
+          udpPort: info.port,
+          tcpPort: info.port
+        };
+        peer = new Peer(this.privateKey, this.endpoint, endpoint, this.socket, this.table);
+
+        this.addPeer(peer).then(added => {
+          if (added) {
+            peer.onMessage(packet).catch(e => {
+              console.error(e);
+            });
+          }
+        });
       }
     });
 
@@ -56,7 +69,7 @@ export class Server {
   }
 
   async boot (endpoint: Endpoint) {
-    const peer = new Peer(this.privateKey, this.endpoint, endpoint, this.socket);
+    const peer = new Peer(this.privateKey, this.endpoint, endpoint, this.socket, this.table);
     await this.addPeer(peer);
     
     peer.on('verified', () => {
@@ -68,6 +81,8 @@ export class Server {
   }
 
   async addPeer (peer: Peer): Promise<boolean> {
+    if (peer.receiverEndpoint.id.equals(this.endpoint.id)) return false;
+
     if (this.banned[peer.receiverEndpoint.id.toString('hex')]) {
       return false;
     }
@@ -82,7 +97,7 @@ export class Server {
     }
 
     peer.on('neighbor', (endpoint: Endpoint) => {
-      const neighbor = new Peer(this.privateKey, this.endpoint, endpoint, this.socket);
+      const neighbor = new Peer(this.privateKey, this.endpoint, endpoint, this.socket, this.table);
       this.addPeer(neighbor).then(added => {
         if (added) {
           neighbor.ping();
@@ -110,7 +125,8 @@ export class Server {
 
   refresh () {
     for (const peer of this.table.list()) {
-      if (bufferToInt(peer.receiverEndpoint.id) % 10 !== this.refreshSelector) continue;
+      if (bufferToInt(peer.receiverEndpoint.id) % 10 !== this.refreshSelector % 10) continue;
+      peer.ping();
       peer.findNodes(randomBytes(64));
     }
 

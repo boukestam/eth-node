@@ -1,8 +1,9 @@
 import { Endpoint } from "./endpoint";
 import udp, { RemoteInfo, Socket } from 'dgram';
-import { rlpDecode, rlpEncode } from "./rlp";
 import { encodePacket, encodeEndpoint, encodeExpiration, decodePacket, Packet } from "./packet";
 import EventEmitter from "events";
+import * as rlp from 'rlp';
+import { KademliaTable } from "./kademlia";
 
 function bufferToNumber (buffer: Buffer) {
   if (buffer.length === 0) return 0;
@@ -22,7 +23,9 @@ export class Peer extends EventEmitter {
   queried: boolean;
   pingTime: number;
 
-  constructor (privateKey: Buffer, initiatorEndpoint: Endpoint, receiverEndpoint: Endpoint, socket: Socket) {
+  table: KademliaTable<Peer>;
+
+  constructor (privateKey: Buffer, initiatorEndpoint: Endpoint, receiverEndpoint: Endpoint, socket: Socket, table: KademliaTable<Peer>) {
     super();
 
     this.privateKey = privateKey;
@@ -32,6 +35,8 @@ export class Peer extends EventEmitter {
 
     this.verified = false;
     this.queried = false;
+
+    this.table = table;
   }
 
   send (msg: Buffer, log?: string): Promise<void> {
@@ -50,7 +55,7 @@ export class Peer extends EventEmitter {
 
   async ping () {
     await this.send(
-      encodePacket(this.privateKey, 0x01, rlpEncode([
+      encodePacket(this.privateKey, 0x01, rlp.encode([
         Buffer.from([0x04]),
         encodeEndpoint(this.initiatorEndpoint),
         encodeEndpoint(this.receiverEndpoint), 
@@ -63,7 +68,7 @@ export class Peer extends EventEmitter {
 
   async pong (hash: Buffer) {
     await this.send(
-      encodePacket(this.privateKey, 0x02, rlpEncode([
+      encodePacket(this.privateKey, 0x02, rlp.encode([
         encodeEndpoint(this.receiverEndpoint),
         hash,
         encodeExpiration()
@@ -73,7 +78,7 @@ export class Peer extends EventEmitter {
 
   async findNodes (target: Buffer) {
     await this.send(
-      encodePacket(this.privateKey, 0x03, rlpEncode([
+      encodePacket(this.privateKey, 0x03, rlp.encode([
         target,
         encodeExpiration()
       ]))
@@ -81,14 +86,25 @@ export class Peer extends EventEmitter {
   }
 
   async onMessage (packet: Packet) {
-    const data = rlpDecode(packet.packetData);
+    const data = rlp.decode(packet.packetData) as any;
 
     if (packet.packetType === 0x01) { // Ping
       await this.pong(packet.hash);
+      this.pingTime = 0;
       this.verified = true;
       this.emit('verified');
     } else if (packet.packetType === 0x02) { // Pong
       const [to, pingHash,  expiration] = data as [Buffer[], Buffer, Buffer];
+    } else if (packet.packetType === 0x03) { // FindNodes
+      const [target, expiration] = data as [Buffer, Buffer];
+      const peers = this.table.closest(16, undefined, target);
+      
+      await this.send(
+        encodePacket(this.privateKey, 0x04, rlp.encode([
+          peers.map(peer => encodeEndpoint(peer.receiverEndpoint)),
+          encodeExpiration()
+        ]))
+      );
     } else if (packet.packetType === 0x04) { // Neighbors
       const [nodes, expiration] = data as [Buffer[][], Buffer];
 

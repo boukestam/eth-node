@@ -1,10 +1,15 @@
-import { generatePrivateKey, publicFromPrivate } from './util';
+import { bufferToInt, generatePrivateKey, intToBuffer, publicFromPrivate } from './util';
 import { Endpoint, parseEnode } from './endpoint';
 import { Server } from './server';
 import { RLPxPeer } from './rlpx-peer';
 import { ETH } from './eth';
 import { Peer } from './peer';
 import net from 'net';
+import { Block } from './block';
+import * as rlp from 'rlp';
+
+var levelup = require('levelup')
+var leveldown = require('leveldown')
 
 const privateKey = generatePrivateKey();
 const publicKey = publicFromPrivate(privateKey);
@@ -53,31 +58,34 @@ const tcpSocket = net.createServer((socket) => {
   tcpPeers.push(tcpPeer);
 });
 
-tcpSocket.listen(endpoint.tcpPort, '192.168.178.12');
+tcpSocket.listen(endpoint.tcpPort, '192.168.178.17');
+let refreshSelector = 0;
 
 setInterval(() => {
   for (const peer of tcpPeers) {
     if (peer.closed) {
       tcpPeers.splice(tcpPeers.indexOf(peer), 1);
+      eth.onDisconnect(peer);
     }
   }
 
   for (const peer of server.table.list()) {
-    if (!peer.verified && peer.pingTime > 0 && Date.now() - peer.pingTime > 2000) {
+    if (peer.pingTime > 0 && Date.now() - peer.pingTime > 2000) {
       // timeout
       server.remove(peer);
     }
   }
 
-  console.log('Verified UDP peers', server.table.list().filter(peer => peer.verified).length);
-  console.log('Verified TCP peers', tcpPeers.filter(peer => peer.verified).length);
+  console.log('UDP peers', server.table.list().length + '/' + server.table.list().filter(peer => peer.verified).length, 'TCP peers', tcpPeers.length + '/' + tcpPeers.filter(peer => peer.verified).length, 'TxPool size', eth.transactionHashes.size, 'Blocks', eth.blocks.size);
 
-  const verified = server.table.list().filter(peer => peer.verified && !triedPeers.has(peer));
+  const verified = server.table.list().filter(peer => peer.verified && !tcpPeers.some(tp => tp.receiverEndpoint.id.equals(peer.receiverEndpoint.id)));
   if (verified.length === 0) return;
 
-  for (let i = 0; i < 10 && i < verified.length; i++) {
-    const peer = verified[i];
+  for (const peer of verified) {
+    if (bufferToInt(peer.receiverEndpoint.id) % 10 !== refreshSelector % 10) continue;
     triedPeers.add(peer);
+
+    if (!peer.receiverEndpoint.tcpPort) continue;
 
     const tcpPeer = new RLPxPeer(privateKey, endpoint, peer.receiverEndpoint);
     tcpPeers.push(tcpPeer);
@@ -85,8 +93,90 @@ setInterval(() => {
     tcpPeer.on('eth', () => eth.onConnect(tcpPeer));
     tcpPeer.on('message', (code, body) => eth.onMessage(tcpPeer, code, body));
   }
+
+  refreshSelector++;
 }, 2000);
 
 setInterval(() => {
   server.refresh();
 }, 6000);
+
+let latestBlock = 3913997;
+
+const db = levelup(leveldown('./data'));
+
+// const stream = db.createReadStream();
+// stream.on('data', (data) => {
+//   const block = new Block(rlp.decode(data.value) as any);
+//   if (block.raw[1].length > 0) {
+//     console.log(block.raw[1].length + ' transactions');
+//   }
+// });
+
+async function sync () {
+  const verified = tcpPeers.filter(peer => peer.verified);
+  verified.sort((a, b) => a.timeout - b.timeout);
+
+  if (verified.length > 0 && latestBlock < 14063719) {
+    const peer = verified[0];
+
+    try {
+      let headers = await eth.getBlockHeaders(peer, latestBlock + 1, 14063719);
+      console.log('Got headers', headers.length);
+      
+      while (headers.length > 0) {
+        const blocks = headers.map(header => new Block([header]));
+        const hashes = blocks.map(block => block.hash());
+        
+        const result = await eth.getBlockBodies(peer, hashes);
+        if (result.length === 0) break;
+
+        const numbers = blocks.map(block => block.parsedHeader().number);
+        const ops = [];
+        
+        for (let i = 0; i < result.length; i++) {
+          const numberB = intToBuffer(numbers[i]);
+
+          const headerKey = Buffer.concat([Buffer.from('h'), numberB]);
+          const bodyKey = Buffer.concat([Buffer.from('b'), numberB]);
+          const hashToNumberKey = Buffer.concat([Buffer.from('n'), hashes[i]]);
+
+          ops.push({
+            type: 'put',
+            key: headerKey,
+            value: rlp.encode(headers[i])
+          });
+
+          ops.push({
+            type: 'put',
+            key: bodyKey,
+            value: rlp.encode(result[i])
+          });
+
+          ops.push({
+            type: 'put',
+            key: hashToNumberKey,
+            value: numberB
+          });
+        }
+
+        db.batch(ops);
+
+        console.log('Got ', result.length, ' bodies from ', numbers[0], ' to ', numbers[result.length - 1]);
+  
+        latestBlock = numbers[numbers.length - 1];
+        headers = headers.slice(result.length);
+      }
+    } catch (e) {
+      if (e === 'timeout') {
+        peer.timeout = Date.now();
+        console.log('Peer timed out', peer.idString());
+      } else {
+        console.error('Error while syncing blocks', e);
+      }
+    }
+  }
+
+  setTimeout(sync, 100);
+}
+sync();

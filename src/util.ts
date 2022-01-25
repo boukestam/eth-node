@@ -43,17 +43,26 @@ export function pkToId (pk: Buffer) {
 }
 
 export function intToBuffer (v: number) {
+  if (v === 0) return Buffer.alloc(0);
   let hex = v.toString(16)
   if (hex.length % 2 === 1) hex = '0' + hex
   return Buffer.from(hex, 'hex')
 }
 
-export function bufferToInt (buffer: Buffer) {
-  if (buffer.length === 0) return NaN
+export function bufferToInt (buffer: Buffer): number {
+  if (buffer.length === 0) return 0;
 
-  let n = 0
-  for (let i = 0; i < buffer.length; ++i) n = n * 256 + buffer[i]
-  return n
+  let n = 0;
+  for (let i = 0; i < buffer.length; ++i) n = n * 256 + buffer[i];
+  return n;
+}
+
+export function bufferToBigInt (buffer: Buffer): BigInt {
+  if (buffer.length === 0) return 0n;
+
+  let n = 0n;
+  for (let i = 0; i < buffer.length; ++i) n = n * 256n + BigInt(buffer[i]);
+  return n;
 }
 
 export function assertEq(expected: any, actual: any, msg: string): void {
