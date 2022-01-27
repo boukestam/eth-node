@@ -16,7 +16,7 @@ import {
   zfill,
   unstrictDecode
 } from './util'
-import * as rlp from 'rlp';
+import { rlpEncode } from './rlp';
 
 function ecdhX(publicKey: Buffer, privateKey: Buffer) {
   // return (publicKey * privateKey).x
@@ -190,7 +190,7 @@ export class ECIES {
       Buffer.from([0x05])
     ]
 
-    const dataRLP = rlp.encode(data)
+    const dataRLP = rlpEncode(data)
     const pad = crypto.randomBytes(100 + Math.floor(Math.random() * 151)) // Random padding between 100, 250
     const authMsg = Buffer.concat([dataRLP, pad])
     const overheadLength = 113
@@ -278,7 +278,7 @@ export class ECIES {
   createAckEIP8(): Buffer | undefined {
     const data = [pkToId(this._ephemeralPublicKey), this._nonce, Buffer.from([0x05])]
 
-    const dataRLP = rlp.encode(data)
+    const dataRLP = rlpEncode(data)
     const pad = crypto.randomBytes(100 + Math.floor(Math.random() * 151)) // Random padding between 100, 250
     const ackMsg = Buffer.concat([dataRLP, pad])
     const overheadLength = 113
@@ -341,7 +341,7 @@ export class ECIES {
 
   createHeader(size: number): Buffer | undefined {
     const bufSize = zfill(intToBuffer(size), 3)
-    let header = Buffer.concat([bufSize, rlp.encode([Buffer.from([0]), Buffer.from([0])])]) // TODO: the rlp will contain something else someday
+    let header = Buffer.concat([bufSize, rlpEncode([Buffer.from([0]), Buffer.from([0])])]) // TODO: the rlp will contain something else someday
     header = zfill(header, 16, false)
     if (!this._egressAes) return
     header = this._egressAes.update(header)

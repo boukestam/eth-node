@@ -1,5 +1,5 @@
+import { rlpEncode } from "./rlp";
 import { keccak256 } from "./util";
-import * as rlp from 'rlp';
 
 export class Transaction {
 
@@ -20,6 +20,6 @@ export class Transaction {
   }
 
   hash () {
-    return keccak256(rlp.encode(this.raw));
+    return keccak256(rlpEncode(this.raw));
   }
 }

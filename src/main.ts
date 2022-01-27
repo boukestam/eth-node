@@ -1,12 +1,12 @@
 import { bufferToInt, generatePrivateKey, intToBuffer, publicFromPrivate } from './util';
-import { Endpoint, parseEnode } from './endpoint';
+import { Endpoint } from './endpoint';
 import { Server } from './server';
 import { RLPxPeer } from './rlpx-peer';
 import { ETH } from './eth';
 import { Peer } from './peer';
 import net from 'net';
 import { Block } from './block';
-import * as rlp from 'rlp';
+import { rlpDecode, rlpEncode } from './rlp';
 
 var levelup = require('levelup')
 var leveldown = require('leveldown')
@@ -36,7 +36,7 @@ const bootNodes = [
 const server = new Server(privateKey, endpoint);
 
 for (const node of bootNodes) {
-  server.boot(parseEnode(node)).catch(e => console.error(e));
+  //server.boot(parseEnode(node)).catch(e => console.error(e));
 }
 
 const triedPeers = new Set<Peer>();
@@ -144,13 +144,13 @@ async function sync () {
           ops.push({
             type: 'put',
             key: headerKey,
-            value: rlp.encode(headers[i])
+            value: rlpEncode(headers[i])
           });
 
           ops.push({
             type: 'put',
             key: bodyKey,
-            value: rlp.encode(result[i])
+            value: rlpEncode(result[i])
           });
 
           ops.push({
@@ -179,4 +179,4 @@ async function sync () {
 
   setTimeout(sync, 100);
 }
-sync();
+//sync();

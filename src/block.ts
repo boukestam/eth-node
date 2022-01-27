@@ -1,5 +1,5 @@
+import { rlpEncode } from "./rlp";
 import { bufferToBigInt, bufferToInt, keccak256 } from "./util";
-import * as rlp from 'rlp';
 
 interface BlockHeader {
   parentHash: Buffer;
@@ -80,10 +80,10 @@ export class Block {
   }
 
   hash () {
-    return keccak256(rlp.encode(this.header()));
+    return keccak256(rlpEncode(this.header()));
   }
 
   transactionHashes (): Buffer[] {
-    return this.body()[0].map(raw => keccak256(rlp.encode(raw)));
+    return this.body()[0].map(raw => keccak256(rlpEncode(raw)));
   }
 }

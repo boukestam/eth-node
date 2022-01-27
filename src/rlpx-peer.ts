@@ -1,16 +1,10 @@
-import crypto, { Decipher } from 'crypto';
-import secp256k1 from 'secp256k1';
-import { bufferToInt, generatePrivateKey, idToPK, intToBuffer, keccak256, printBytes, unstrictDecode, zfill } from './util';
-import {xor} from 'bitwise-buffer';
+import { bufferToInt, intToBuffer, unstrictDecode } from './util';
 import { ECIES } from './ecies';
 import net from 'net';
 import { Endpoint } from './endpoint';
-import { MAC } from './mac';
-import * as rlp from 'rlp';
 import { compressSync, uncompressSync } from 'snappy';
-import { BN } from 'bn.js';
-import { Peer } from './peer';
 import EventEmitter from 'events';
+import { rlpEncode } from './rlp';
 
 const DISCONNECT_REASONS = {
   0x00:	"Disconnect requested",
@@ -103,7 +97,7 @@ export class RLPxPeer extends EventEmitter {
   send (code: number, data: Buffer, compress: boolean) {
     if (this.closed) return;
 
-    const msg = Buffer.concat([rlp.encode(code), compress ? compressSync(data) : data]);
+    const msg = Buffer.concat([rlpEncode(code), compress ? compressSync(data) : data]);
 
     const header = this.eceis.createHeader(msg.length);
     this.socket.write(header);
@@ -113,7 +107,7 @@ export class RLPxPeer extends EventEmitter {
   }
 
   sendHello () {
-    this.send(0x00, rlp.encode([
+    this.send(0x00, rlpEncode([
       intToBuffer(5),
       Buffer.from('eth-node/v0.1', 'ascii'),
       [
@@ -130,7 +124,7 @@ export class RLPxPeer extends EventEmitter {
   }
 
   disconnect (reason: number) {
-    this.send(0x01, rlp.encode([
+    this.send(0x01, rlpEncode([
       intToBuffer(reason)
     ]), true);
     this.close();
@@ -194,7 +188,7 @@ export class RLPxPeer extends EventEmitter {
         this.closed = true;
         //console.log('Disconnected', DISCONNECT_REASONS[bufferToInt(data[0])]);
       } else if (code === 0x02) { // ping
-        this.send(0x03, rlp.encode([]), true);
+        this.send(0x03, rlpEncode([]), true);
       } else if (code >= 0x10) {
         this.emit('message', code - 0x10, data);
       } else {

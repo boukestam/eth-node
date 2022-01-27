@@ -1,7 +1,7 @@
 import secp256k1, { publicKeyConvert } from 'secp256k1';
 import crypto from 'crypto';
 import createKeccakHash from 'keccak';
-import * as rlp from 'rlp';
+import { rlpDecode } from './rlp';
 
 export function generatePrivateKey (): Buffer {
   while (true) {
@@ -86,5 +86,5 @@ export function zfill(buffer: Buffer, size: number, leftpad: boolean = true): Bu
 export function unstrictDecode(value: Buffer) {
   // rlp library throws on remainder.length !== 0
   // this utility function bypasses that
-  return (rlp.decode(value, true) as any).data
+  return (rlpDecode(value, true) as any).data
 }

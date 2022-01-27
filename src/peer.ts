@@ -1,9 +1,9 @@
 import { Endpoint } from "./endpoint";
-import udp, { RemoteInfo, Socket } from 'dgram';
+import { Socket } from 'dgram';
 import { encodePacket, encodeEndpoint, encodeExpiration, decodePacket, Packet } from "./packet";
 import EventEmitter from "events";
-import * as rlp from 'rlp';
 import { KademliaTable } from "./kademlia";
+import { rlpDecode, rlpEncode } from "./rlp";
 
 function bufferToNumber (buffer: Buffer) {
   if (buffer.length === 0) return 0;
@@ -55,7 +55,7 @@ export class Peer extends EventEmitter {
 
   async ping () {
     await this.send(
-      encodePacket(this.privateKey, 0x01, rlp.encode([
+      encodePacket(this.privateKey, 0x01, rlpEncode([
         Buffer.from([0x04]),
         encodeEndpoint(this.initiatorEndpoint),
         encodeEndpoint(this.receiverEndpoint), 
@@ -68,7 +68,7 @@ export class Peer extends EventEmitter {
 
   async pong (hash: Buffer) {
     await this.send(
-      encodePacket(this.privateKey, 0x02, rlp.encode([
+      encodePacket(this.privateKey, 0x02, rlpEncode([
         encodeEndpoint(this.receiverEndpoint),
         hash,
         encodeExpiration()
@@ -78,7 +78,7 @@ export class Peer extends EventEmitter {
 
   async findNodes (target: Buffer) {
     await this.send(
-      encodePacket(this.privateKey, 0x03, rlp.encode([
+      encodePacket(this.privateKey, 0x03, rlpEncode([
         target,
         encodeExpiration()
       ]))
@@ -86,7 +86,7 @@ export class Peer extends EventEmitter {
   }
 
   async onMessage (packet: Packet) {
-    const data = rlp.decode(packet.packetData) as any;
+    const data = rlpDecode(packet.packetData) as any;
 
     if (packet.packetType === 0x01) { // Ping
       await this.pong(packet.hash);
@@ -100,7 +100,7 @@ export class Peer extends EventEmitter {
       const peers = this.table.closest(16, undefined, target);
       
       await this.send(
-        encodePacket(this.privateKey, 0x04, rlp.encode([
+        encodePacket(this.privateKey, 0x04, rlpEncode([
           peers.map(peer => encodeEndpoint(peer.receiverEndpoint)),
           encodeExpiration()
         ]))

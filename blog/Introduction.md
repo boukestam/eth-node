@@ -62,3 +62,6 @@ I can then run it with ```ts-node main.ts```. Now we can get started on the actu
 5. [Ethereum Wire Protocol](Ethereum%20Wire%20Protocol.md)
 6. [Chain synchronization](Chain%20synchronization.md)
 7. [Merkle Patricia Tree](Merkle%20Patricia%20Trie.md)
+8. [Ethereum Virtual Machine](Ethereum%20Virtual%20Machine.md)
+9. [JSON-RPC API](JSON-RPC%20API.md)
+10. [Ethash Mining](Ethash%20Mining.md)

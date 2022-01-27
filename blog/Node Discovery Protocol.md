@@ -255,3 +255,7 @@ IP 144.91.112.41 UDP 30303 TCP 30303
 ```
 
 We can now use these nodes to continue looking for more nodes until we have enough. But what is enough and how will we store these nodes? These questions will be answered in the next part in the series.
+
+### Improvements
+
+- Periodically clean up unresponsive nodes

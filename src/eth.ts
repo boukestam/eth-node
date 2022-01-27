@@ -1,9 +1,8 @@
 import { RLPxPeer } from "./rlpx-peer";
-import { bufferToInt, intToBuffer, keccak256 } from "./util";
-import * as rlp from 'rlp';
+import { bufferToInt, intToBuffer } from "./util";
 import { Transaction } from "./transaction";
 import { Block } from "./block";
-import crypto from 'crypto';
+import { rlpEncode } from "./rlp";
 
 export class ETH {
 
@@ -40,7 +39,7 @@ export class ETH {
   }
 
   sendStatus (peer: RLPxPeer) {
-    this.send(peer, 0x00, rlp.encode([
+    this.send(peer, 0x00, rlpEncode([
       intToBuffer(66),  // protocol version
       intToBuffer(1),   // chain id
       intToBuffer(17179869184), // genesis total difficulty
@@ -67,7 +66,7 @@ export class ETH {
       const broadcastPeerPool = this.hashesByPeer.get(broadcastPeer.idString());
       const broadcastHashes = bodies.filter((v, i) => broadcastPeerPool.has(hashStrings[i]));
 
-      this.send(broadcastPeer, 0x08, rlp.encode(broadcastHashes));
+      this.send(broadcastPeer, 0x08, rlpEncode(broadcastHashes));
 
       for (const hash of hashStrings) broadcastPeerPool.add(hash);
     }
@@ -82,7 +81,7 @@ export class ETH {
     return new Promise((resolve, reject) => {
       const requestId = Math.floor(Math.random() * 1000000);
 
-      this.send(peer, code, rlp.encode([
+      this.send(peer, code, rlpEncode([
         intToBuffer(requestId),
         data
       ]));
@@ -150,12 +149,12 @@ export class ETH {
         chunk.push(Buffer.from(hash, 'hex'));
 
         if (chunk.length === 4096) {
-          this.send(peer, 0x08, rlp.encode(chunk));
+          this.send(peer, 0x08, rlpEncode(chunk));
           chunk = [];
         }
       }
 
-      if (chunk.length > 0) this.send(peer, 0x08, rlp.encode(chunk));
+      if (chunk.length > 0) this.send(peer, 0x08, rlpEncode(chunk));
     } else if (code === 0x01) { // new block hashes
       const blocks = body as [Buffer, Buffer][];
       const hashStrings = blocks.map(([hash, _]) => hash.toString('hex'));
@@ -179,7 +178,7 @@ export class ETH {
         if (this.blocks.has(startHash)) {
           start = this.blocks.get(startHash).parsedHeader().number;
         } else {
-          this.send(peer, 0x04, rlp.encode([requestId, []]));
+          this.send(peer, 0x04, rlpEncode([requestId, []]));
           return;
         }
       } else {
@@ -201,7 +200,7 @@ export class ETH {
         }
       }
 
-      this.send(peer, 0x04, rlp.encode([requestId, headers]));
+      this.send(peer, 0x04, rlpEncode([requestId, headers]));
     } else if (code === 0x04 || code === 0x06) { // block headers or bodies
       const requestId = bufferToInt(body[0]);
 
@@ -234,7 +233,7 @@ export class ETH {
         }
       }
 
-      this.send(peer, 0x0a, rlp.encode([requestId, transactions]));
+      this.send(peer, 0x0a, rlpEncode([requestId, transactions]));
     } else {
       console.log('Unhandled ETH code', code);
     }

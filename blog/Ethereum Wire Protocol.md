@@ -1,6 +1,6 @@
 # Ethereum Wire Protocol
 
-The ethereum wire protocol is the build on top of the RLPx protocol. 
+The [ethereum wire protocol](https://github.com/ethereum/devp2p/blob/master/caps/eth.md) is the build on top of the RLPx protocol. 
 It's messages are offset by 0x10 (right after the RLPx builtin messages).
 There are 3 main functionalities in the protocol:
 
@@ -67,9 +67,84 @@ Whenever new transaction hashes are received, we need to 'forward' them to all n
 Also, we need to retrieve the actual transaction information.
 To know which nodes know about which transactions, we also keep a record of all exchanged transaction hashes for each node.
 
+Let's start of by creating the data structures for keeping the pool of hashes and the hashes per peer:
+
 ```typescript
-transactionHashes: Set<string>;
-hashesByPeer: Map<string, Set<string>>;
+const transactionHashes = new Set<string>();
+const hashesByPeer = new Map<string, Set<string>>();
+```
+
+Then we need to handle the incoming transaction hashes message by extracting the hashes and converting them to strings to use in the data structures:
+
+```typescript
+if (code === 0x08) { // new pooled transaction hashes
+  const hashes = body as Buffer[];
+  const hashStrings = body.map(buffer => buffer.toString('hex'));
+
+  this.broadcast(peer, this.transactionHashes, hashStrings, hashes);
+}
+```
+
+In the broadcast function we need to add the hash to the pool and then send the message to all peers that don't already know of this hash:
+
+```typescript
+broadcast (from: RLPxPeer, set: Set<string>, hashStrings: string[], bodies: any[]) {
+  const peerPool = this.hashesByPeer.get(from.idString());
+
+  for (const hash of hashStrings) {
+    set.add(hash);
+    peerPool.add(hash);
+  }
+
+  for (const broadcastPeer of this.peers) {
+    if (broadcastPeer === from) continue;
+
+    const broadcastPeerPool = this.hashesByPeer.get(broadcastPeer.idString());
+    const broadcastHashes = bodies.filter((v, i) => broadcastPeerPool.has(hashStrings[i]));
+
+    this.send(broadcastPeer, 0x08, rlp.encode(broadcastHashes));
+
+    for (const hash of hashStrings) broadcastPeerPool.add(hash);
+  }
+}
+```
+
+We also need to send all pooled transactions whenever a new connection is made. 
+According to the documentation, the maximum amount of hashes per message is 4096.
+So we need to split the hashes into chunks and send the chunks one by one:
+
+```typescript
+const hashes = this.transactionHashes.values();
+let chunk = [];
+
+for (const hash of hashes) {
+  chunk.push(Buffer.from(hash, 'hex'));
+
+  if (chunk.length === 4096) {
+    this.send(peer, 0x08, rlp.encode(chunk));
+    chunk = [];
+  }
+}
+
+if (chunk.length > 0) this.send(peer, 0x08, rlp.encode(chunk));
 ```
 
 ### Block propagation
+
+Block propagation is basically the same as transaction exchange, but with blocks.
+When a new block is found, it is propagated throughout the network using the 'New Block Hashes' message (0x01).
+When we receive new blocks, we need to send it to all peers that don't know of this block yet.
+We can reuse the broadcast method for this:
+
+```typescript
+if (code === 0x01) { // new block hashes
+  const blocks = body as [Buffer, Buffer][];
+  const hashStrings = blocks.map(([hash, _]) => hash.toString('hex'));
+
+  this.broadcast(peer, this.blockHashes, hashStrings, blocks);
+}
+```
+
+### Improvements
+
+- Clean up or limit the transaction pool size so it doesn't get too big
