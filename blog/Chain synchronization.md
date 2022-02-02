@@ -26,6 +26,7 @@ When someone mines the same block, but is just too late and is no longer the fir
 - gas limit
 - gas used
 - time (UTC)
+- logs bloom
 - proof of work
 
 The exact definition can be found [in the documentation](https://github.com/ethereum/devp2p/blob/master/caps/eth.md#block-encoding-and-validity).

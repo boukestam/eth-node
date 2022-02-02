@@ -33,6 +33,14 @@ export class Block {
     return this.raw[0];
   }
 
+  transactions () {
+    return this.raw[1];
+  }
+
+  ommers () {
+    return this.raw[2];
+  }
+
   parsedHeader (): BlockHeader {
     const [
       parentHash,
@@ -84,6 +92,6 @@ export class Block {
   }
 
   transactionHashes (): Buffer[] {
-    return this.body()[0].map(raw => keccak256(rlpEncode(raw)));
+    return this.transactions().map(raw => keccak256(rlpEncode(raw)));
   }
 }
