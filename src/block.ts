@@ -1,24 +1,6 @@
 import { rlpEncode } from "./rlp";
 import { bufferToBigInt, bufferToInt, keccak256 } from "./util";
 
-interface BlockHeader {
-  parentHash: Buffer;
-  ommersHash: Buffer;
-  coinbase: Buffer;
-  stateRoot: Buffer;
-  txsRoot: Buffer;
-  receiptsRoot: Buffer;
-  bloom: Buffer;
-  difficulty: BigInt;
-  number: number;
-  gasLimit: BigInt;
-  gasUsed: BigInt;
-  time: BigInt;
-  extradata: Buffer;
-  mixDigest: Buffer;
-  blockNonce: Buffer;
-}
-
 export class Block {
 
   static HEADER_SIZE = 550;
@@ -41,43 +23,21 @@ export class Block {
     return this.raw[2];
   }
 
-  parsedHeader (): BlockHeader {
-    const [
-      parentHash,
-      ommersHash,
-      coinbase,
-      stateRoot,
-      txsRoot,
-      receiptsRoot,
-      bloom,
-      difficulty,
-      number,
-      gasLimit,
-      gasUsed,
-      time,
-      extradata,
-      mixDigest,
-      blockNonce
-    ] = this.header();
-
-    return {
-      parentHash,
-      ommersHash,
-      coinbase,
-      stateRoot,
-      txsRoot,
-      receiptsRoot,
-      bloom,
-      difficulty: bufferToBigInt(difficulty),
-      number: bufferToInt(number),
-      gasLimit: bufferToBigInt(gasLimit),
-      gasUsed: bufferToBigInt(gasUsed),
-      time: bufferToBigInt(time),
-      extradata,
-      mixDigest,
-      blockNonce
-    };
-  }
+  parentHash = () => this.raw[0][0];
+  ommersHash = () => this.raw[0][1];
+  coinbase = () => this.raw[0][2];
+  stateRoot = () => this.raw[0][3];
+  txsRoot = () => this.raw[0][4];
+  receiptsRoot = () => this.raw[0][5];
+  bloom = () => this.raw[0][6];
+  difficulty = () => bufferToBigInt(this.raw[0][7]);
+  number = () => bufferToInt(this.raw[0][8]);
+  gasLimit = () => bufferToBigInt(this.raw[0][9]);
+  gasUsed = () => bufferToBigInt(this.raw[0][10]);
+  time = () => bufferToBigInt(this.raw[0][11]);
+  extradata = () => this.raw[0][12];
+  mixDigest = () => this.raw[0][13];
+  blockNonce = () => this.raw[0][14];
 
   hasBody () {
     return this.raw.length > 1;
@@ -89,6 +49,10 @@ export class Block {
 
   hash () {
     return keccak256(rlpEncode(this.header()));
+  }
+
+  powHash () {
+    return keccak256(rlpEncode(this.header().slice(0, -2)));
   }
 
   transactionHashes (): Buffer[] {

@@ -144,7 +144,7 @@ export class Client {
           const result = await this.eth.getBlockBodies(peer, hashes);
           if (result.length === 0) break;
   
-          const numbers = blocks.map(block => block.parsedHeader().number);
+          const numbers = blocks.map(block => block.number());
           const ops = [];
           
           for (let i = 0; i < result.length; i++) {

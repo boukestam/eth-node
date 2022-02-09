@@ -1,5 +1,5 @@
 import { rlpEncode } from "./rlp";
-import { keccak256 } from "./util";
+import { bufferToBigInt, keccak256 } from "./util";
 
 export class Transaction {
 
@@ -18,6 +18,13 @@ export class Transaction {
   constructor (raw: Buffer[]) {
     this.raw = raw;
   }
+
+  nonce = () => bufferToBigInt(this.raw[0]);
+  gasPrice = () => bufferToBigInt(this.raw[1]);
+  gasLimit = () => bufferToBigInt(this.raw[2]);
+  recipient = () => this.raw[3];
+  value = () => bufferToBigInt(this.raw[4]);
+  data = () => this.raw[5];
 
   hash () {
     return keccak256(rlpEncode(this.raw));

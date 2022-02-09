@@ -14,7 +14,8 @@ import {
   intToBuffer,
   bufferToInt,
   zfill,
-  unstrictDecode
+  unstrictDecode,
+  keccak256Array
 } from './util'
 import { rlpEncode } from './rlp';
 
@@ -163,13 +164,13 @@ export class ECIES {
 
     if (!this._ephemeralSharedSecret) return
     const IV = Buffer.allocUnsafe(16).fill(0x00)
-    const sharedSecret = keccak256(this._ephemeralSharedSecret, hNonce)
+    const sharedSecret = keccak256Array([this._ephemeralSharedSecret, hNonce])
 
-    const aesSecret = keccak256(this._ephemeralSharedSecret, sharedSecret)
+    const aesSecret = keccak256Array([this._ephemeralSharedSecret, sharedSecret])
     this._ingressAes = crypto.createDecipheriv('aes-256-ctr', aesSecret, IV)
     this._egressAes = crypto.createDecipheriv('aes-256-ctr', aesSecret, IV)
 
-    const macSecret = keccak256(this._ephemeralSharedSecret, aesSecret)
+    const macSecret = keccak256Array([this._ephemeralSharedSecret, aesSecret])
     this._ingressMac = new MAC(macSecret)
     this._ingressMac.update(Buffer.concat([xor(macSecret, this._nonce), remoteData]))
     this._egressMac = new MAC(macSecret)

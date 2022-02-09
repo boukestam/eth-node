@@ -48,6 +48,10 @@ The chain synchronization therefore starts at block number 1, since we already d
 
 ### Downloading blocks
 
+We can request block headers from other peers in the network.
+To do this, we have to send a message with code `0x03` and specify the block number to start at and the number of headers we want.
+The response to this message always contains a maximum of 2048 headers.
+
 ```typescript
 getBlockHeaders (peer: RLPxPeer, start: number, count: number): Promise<Buffer[][]> {
   return this.request(peer, 0x03, [
@@ -59,8 +63,38 @@ getBlockHeaders (peer: RLPxPeer, start: number, count: number): Promise<Buffer[]
 }
 ```
 
+Once we have the headers, we can send another request to get the block bodies, these contain the transactions and receipts.
+This requests has the code `0x05` and needs the hashes of the blocks that we want to get.
+The hashes are a keccak256 hash of the rlp encoded header data.
+The result of this message has a maximum size of 2MB.
+
 ```typescript
 getBlockBodies (peer: RLPxPeer, hashes: Buffer[]): Promise<any[]> {
   return this.request(peer, 0x05, hashes);
 }
 ```
+
+With these two methods we can now simply do the following loop to download all the blocks:
+
+1. set blockNumber to 1
+2. download 2048 block headers starting from blockNumber
+3. download the corresponding block bodies (possibly in multiple requests)
+4. increase the blockNumber by the amount of downloaded blocks
+5. go back to step 2
+
+### Next steps
+
+Now that we know how to download all the blocks, we need to process them as follows:
+
+- verify header validity (parent, difficulty, gas limit, time)
+- verify the proof of work
+- verify transactions merkle root
+- store the block
+- execute the block, and modify the state trie accordingly
+
+This requires a lot of additional knowledge, which is covered in the following posts:
+
+- [Chain storage](Chain%20storage.md)
+- [Merkle Patricia Tree](Merkle%20Patricia%20Trie.md)
+- [Ethash PoW verification](Ethash%20PoW%20verification.md)
+- [Ethereum Virtual Machine](Ethereum%20Virtual%20Machine.md)

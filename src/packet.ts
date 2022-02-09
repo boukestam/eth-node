@@ -1,4 +1,4 @@
-import { keccak256 } from "./util";
+import { keccak256, keccak256Array } from "./util";
 import secp256k1 from 'secp256k1';
 import { Endpoint } from "./endpoint";
 import ip from 'ip';
@@ -36,7 +36,7 @@ export function encodePacket (privateKey: Buffer, type: number, packetData: Buff
   );
   const signature = Buffer.concat([ sig.signature, Buffer.from([sig.recid])]);
 
-  const hash = keccak256(signature, packetType, packetData);
+  const hash = keccak256Array([signature, packetType, packetData]);
   const packetHeader = Buffer.concat([hash, signature, packetType]);
 
   return Buffer.concat([packetHeader, packetData]);

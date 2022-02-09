@@ -1,6 +1,6 @@
 # Merkle Patricia Trie
 
-![image-20220113222022618](C:\Users\bouke\Documents\blog\trie.png)
+![image-20220113222022618](trie.png)
 
 A Merkle Patricia Trie (just called trie from now on) is a data strcture that functions as a key value store, but has two important properties:
 

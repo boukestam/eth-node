@@ -26,9 +26,28 @@ export function printBytes (s: string, x: Uint8Array): void {
 //   return Buffer.from(new Uint16Array([n]));
 // }
 
-export function keccak256 (...buffers) {
-  const buffer = Buffer.concat(buffers)
-  return createKeccakHash('keccak256').update(buffer).digest()
+export function keccak256 (buffer) {
+  const hash = createKeccakHash('keccak256');
+  hash.update(buffer);
+  return hash.digest()
+}
+
+export function keccak256Array (buffers: Buffer[]) {
+  const hash = createKeccakHash('keccak256');
+  for (const buffer of buffers) hash.update(buffer);
+  return hash.digest()
+}
+
+export function keccak512 (buffer) {
+  const hash = createKeccakHash('keccak512');
+  hash.update(buffer);
+  return hash.digest()
+}
+
+export function keccak512Array (buffers: Buffer[]) {
+  const hash = createKeccakHash('keccak512');
+  for (const buffer of buffers) hash.update(buffer);
+  return hash.digest()
 }
 
 export function idToPK (id: Buffer) {
@@ -57,7 +76,7 @@ export function bufferToInt (buffer: Buffer): number {
   return n;
 }
 
-export function bufferToBigInt (buffer: Buffer): BigInt {
+export function bufferToBigInt (buffer: Buffer): bigint {
   if (buffer.length === 0) return 0n;
 
   let n = 0n;
@@ -87,4 +106,21 @@ export function unstrictDecode(value: Buffer) {
   // rlp library throws on remainder.length !== 0
   // this utility function bypasses that
   return (rlpDecode(value, true) as any).data
+}
+
+export function copy(buffer: Buffer) {
+  const clone = Buffer.alloc(buffer.length);
+  buffer.copy(clone);
+  return clone;
+}
+
+export function reverseBuffer (buffer: Buffer) {
+  const reversed = Buffer.alloc(buffer.length);
+  const end = buffer.length - 1;
+
+  for (let i = end; i >= 0; i--) {
+    reversed[end - i] = buffer[i];
+  }
+
+  return reversed;
 }

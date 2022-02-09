@@ -10,7 +10,7 @@ distance(n₁, n₂) = keccak256(n₁) XOR keccak256(n₂)
 
 This leaves us with a 256-bit number. We start of with the highest (left-most) bit. If this is a 1, we move to the left, if it's a zero, we move to the right. Then onto the next bit. We stop when we find a bucket with enough space in it. If there the bucket is full, but it can still be split further down, we do it. If we end up in a full bucket, we revalidate the nodes in there by sending a ping. If one of them doesn't respond, we replace it with the new one. We don't split further then one branch 'away' in the 1 direction. See [this presentation](https://docs.google.com/presentation/d/11qGZlPWu6vEAhA7p3qsQaQtWH7KofEC9dMeBFZ1gYeA/edit#slide=id.g1718cc2bc_0661) for a more visual explanation.
 
-![image-20220113222022618](C:\Users\bouke\Documents\blog\kademlia.png)
+![image-20220113222022618](kademlia.png)
 
 Because our target is always a distance of 0, we actually don't ever need to split into the '1' direction. Therefore we don't actually need it to be a tree. We can just treat it like a flat array. Index 0 is the 1 branch of the first split, index 1 the second split, etc... Therefore we can do it like this:
 
