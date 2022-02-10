@@ -3,7 +3,7 @@ import { ETH } from "./eth";
 import { Peer } from "./peer";
 import { RLPxPeer } from "./rlpx-peer";
 import { Server } from "./server";
-import { bufferToInt, generatePrivateKey, intToBuffer, publicFromPrivate } from "./util";
+import { bigIntToBuffer, bufferToInt, generatePrivateKey, intToBuffer, publicFromPrivate } from "./util";
 import net from 'net';
 import { Block } from "./block";
 import { rlpEncode } from "./rlp";
@@ -57,7 +57,7 @@ export class Client {
     this.tcpPeers = [];
     this.eth = new ETH();
 
-    this.db = levelup(leveldown('./data'))
+    this.db = levelup(leveldown(process.env.DATA))
   }
 
   start () {

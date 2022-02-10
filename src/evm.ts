@@ -1,10 +1,10 @@
 import { Block } from "./block";
 import { Transaction } from "./transaction";
-import { bufferToBigInt, keccak256 } from "./util";
+import { bigIntToBuffer, bufferToBigInt, keccak256, keccak256Array } from "./util";
 
 export interface Account {
-  address: bigint;
-  nonce: bigint;
+  address: Buffer;
+  nonce: Buffer;
   balance: bigint;
   code?: Buffer;
   storage?: {[key: string]: bigint}
@@ -48,15 +48,15 @@ export class EVM {
     this.accounts = {};
   }
 
-  createAddress (addr: bigint, nonce: bigint): bigint {
-    const hash = sha3_256(addr.toString(16) + nonce.toString(16)).substring(24);
-    return BigInt('0x' + hash);
+  createAddress (addr: Buffer, nonce: Buffer): Buffer {
+    const hash = keccak256Array([addr, nonce]);
+    return hash.slice(-20);
   }
 
-  createAccount (addr: bigint) {
-    this.accounts[addr.toString(16)] = {
+  createAccount (addr: Buffer) {
+    this.accounts[addr.toString('hex')] = {
       address: addr,
-      nonce: 0n,
+      nonce: Buffer.alloc(0),
       balance: 0n
     };
   }
@@ -66,23 +66,22 @@ export class EVM {
     if (key in this.accounts) return this.accounts[key];
 
     return {
-      address: addr,
-      nonce: 0n,
+      address: bigIntToBuffer(addr),
+      nonce: Buffer.alloc(0),
       balance: 0n
     };
   }
 
-  setCode (addr: bigint, code: number[]) {
-    this.accounts[addr.toString(16)].code = code;
+  setCode (addr: Buffer, code: Buffer) {
+    this.accounts[addr.toString('hex')].code = code;
   }
 
-  async run (block: Block, transaction: Transaction): Promise<number[]> {
+  async run (block: Block, transaction: Transaction): Promise<Buffer> {
     const bytes = transaction.data();
     
-    const address = 0x0000n;
     const account: Account = {
-      address: address,
-      nonce: 0n,
+      address: Buffer.alloc(0),
+      nonce: Buffer.alloc(0),
       balance: 0n,
       code: bytes,
       storage: {}
@@ -107,20 +106,20 @@ export class EVM {
 
     let pc = -1n;
     let gasUsed = 0;
-    let result: number[] = [];
+    let result: Buffer = Buffer.alloc(0);
 
     const push = (n: bigint) => stack.push(uint256(n));
     const pop = () => uint256(stack.pop() as bigint);
 
-    const mread = (offset: bigint, length: bigint) => {
-      const output = [];
+    const mread = (offset: bigint, length: bigint): Buffer => {
+      const output: number[] = [];
 
       for (let i = offset; i < offset + length; i++) {
         const key = i.toString(16);
         output.push(key in memory ? memory[key] : 0);
       }
 
-      return output;
+      return Buffer.from(output);
     };
 
     const memoryWrites: MemoryWrite[] = [];
@@ -332,7 +331,7 @@ export class EVM {
       // ADDRESS
       else if (byte === 0x30) {
         gas = 2;
-        push(address);
+        push(bufferToBigInt(account.address));
       }
 
       // BALANCE
@@ -346,7 +345,7 @@ export class EVM {
       // ORIGIN
       else if (byte === 0x32) {
         gas = 2;
-        push(transaction.origin());
+        push(bufferToBigInt(transaction.origin()));
       }
 
       // CALLER
@@ -366,7 +365,7 @@ export class EVM {
         gas = 3;
         const i = pop();
 
-        const value = bytesToBigInt(msg.data.slice(Number(i), Number(i) + 32));
+        const value = bufferToBigInt(msg.data.slice(Number(i), Number(i) + 32));
 
         push(value);
       }
@@ -402,13 +401,13 @@ export class EVM {
 
         gas = 2 + 3 * Number(length);
 
-        mwrite(destOffset, (account.code || []).slice(Number(offset), Number(offset) + Number(length)), length);
+        mwrite(destOffset, (account.code || Buffer.alloc(0)).slice(Number(offset), Number(offset) + Number(length)), length);
       }
 
       // GASPRICE
       else if (byte === 0x3A) {
         gas = 2;
-        push(tx.gasprice);
+        push(transaction.gasPrice());
       }
 
       // EXTCODESIZE
@@ -422,7 +421,7 @@ export class EVM {
       // EXTCODECOPY
       else if (byte === 0x3C) {
         const addr = pop();
-        const code: number[] = this.getAccount(addr).code || [];
+        const code = this.getAccount(addr).code || Buffer.alloc(0);
 
         const destOffset = pop();
         const offset = pop();
@@ -457,31 +456,31 @@ export class EVM {
       // COINBASE
       else if (byte === 0x41) {
         gas = 2;
-        push(block.coinbase);
+        push(block.coinbase());
       }
 
       // TIMESTAMP
       else if (byte === 0x42) {
         gas = 2;
-        push(block.timestamp);
+        push(block.time());
       }
 
       // NUMBER
       else if (byte === 0x43) {
         gas = 2;
-        push(block.number);
+        push(BigInt(block.number()));
       }
 
       // DIFFICULTY	
       else if (byte === 0x44) {
         gas = 2;
-        push(block.difficulty);
+        push(block.difficulty());
       }
 
       // GASLIMIT
       else if (byte === 0x45) {
         gas = 2;
-        push(block.gaslimit);
+        push(block.gasLimit());
       }
 
       // CHAINID
@@ -511,7 +510,7 @@ export class EVM {
       else if (byte === 0x51) {
         gas = 3;
         const offset = pop();
-        push(bytesToBigInt(mread(offset, 32n)));
+        push(bufferToBigInt(mread(offset, 32n)));
       }
 
       // MSTORE
@@ -520,7 +519,7 @@ export class EVM {
         const offset = pop();
         const value = pop();
 
-        mwrite(offset, bigIntToBytes(value), 32n);
+        mwrite(offset, bigIntToBuffer(value), 32n);
       }
 
       // MSTORE8
@@ -529,7 +528,7 @@ export class EVM {
         const offset = pop();
         const value = pop();
 
-        mwrite(offset, [Number(value & 0xFFn)], 1n);
+        mwrite(offset, Buffer.from([Number(value & 0xFFn)]), 1n);
       }
 
       // SLOAD
@@ -591,12 +590,12 @@ export class EVM {
         gas = 3;
         const numBytes = (byte - 0x60) + 1;
 
-        const valueBytes = [];
+        const valueBytes: number[] = [];
         for (let i = 0; i < numBytes; i++) {
           valueBytes.push(bytes[Number(++pc)]);
         }
 
-        const value = bytesToBigInt(valueBytes);
+        const value = bufferToBigInt(Buffer.from(valueBytes));
 
         push(value);
       }
@@ -656,10 +655,7 @@ export class EVM {
       }
 
       gasUsed += gas;
-      await step(pc, stack, memory, storage);
     }
-
-    await step(pc, stack, memory, storage);
 
     return result;
   }

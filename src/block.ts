@@ -1,4 +1,5 @@
 import { rlpEncode } from "./rlp";
+import { Transaction } from "./transaction";
 import { bufferToBigInt, bufferToInt, keccak256 } from "./util";
 
 export class Block {
@@ -15,8 +16,8 @@ export class Block {
     return this.raw[0];
   }
 
-  transactions () {
-    return this.raw[1];
+  transactions (): Transaction[] {
+    return this.raw[1].map(r => new Transaction(r));
   }
 
   ommers () {
@@ -47,15 +48,15 @@ export class Block {
     return [this.raw[1], this.raw[2]];
   }
 
-  hash () {
+  hash (): Buffer {
     return keccak256(rlpEncode(this.header()));
   }
 
-  powHash () {
+  powHash (): Buffer {
     return keccak256(rlpEncode(this.header().slice(0, -2)));
   }
 
   transactionHashes (): Buffer[] {
-    return this.transactions().map(raw => keccak256(rlpEncode(raw)));
+    return this.transactions().map(t => keccak256(rlpEncode(t.raw)));
   }
 }

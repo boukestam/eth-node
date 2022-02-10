@@ -6,6 +6,8 @@ import { Client } from './client';
 import { Worker } from 'worker_threads';
 import { getFullSize, hashimoto } from './ethash';
 
+require('dotenv').config();
+
 const client = new Client();
 
 async function getBlock (blockNumber: number): Promise<Block> {
@@ -26,7 +28,7 @@ async function createStateTrie () {
 
     for (let i = 0; i < transactions.length; i++) {
       const key = rlpEncode(i);
-      trie.put(key, rlpEncode(transactions[i]));
+      trie.put(key, rlpEncode(transactions[i].raw));
     }
   }
 }
@@ -76,7 +78,16 @@ async function verify () {
   }
 }
 
-verify().catch(console.error);
+async function test () {
+  const block = await getBlock(2000003);
+  for (const transaction of block.transactions()) {
+    console.log(transaction.value());
+    console.log(transaction.raw);
+    console.log(transaction.origin());
+  }
+}
+
+test().catch(console.error);
 
 
 //client.start();

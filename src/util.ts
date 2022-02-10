@@ -76,23 +76,14 @@ export function bufferToInt (buffer: Buffer): number {
   return n;
 }
 
-export function bufferToBigInt (buffer: Buffer): bigint {
-  if (buffer.length === 0) return 0n;
-
-  let n = 0n;
-  for (let i = 0; i < buffer.length; ++i) n = n * 256n + BigInt(buffer[i]);
-  return n;
+export function bigIntToBuffer (v: bigint) {
+  if (v === 0n) return Buffer.alloc(0);
+  return Buffer.from(v.toString(16), 'hex');
 }
 
-export function assertEq(expected: any, actual: any, msg: string): void {
-  if (Buffer.isBuffer(expected) && Buffer.isBuffer(actual)) {
-    if (expected.equals(actual)) return;
-    throw new Error(`${msg}: ${expected.toString('hex')} / ${actual.toString('hex')}`);
-  }
-
-  if (expected === actual) return;
-
-  throw new Error(`${msg}: ${expected} / ${actual}`);
+export function bufferToBigInt (buffer: Buffer): bigint {
+  if (buffer.length === 0) return 0n;
+  return BigInt('0x' + buffer.toString('hex'));
 }
 
 export function zfill(buffer: Buffer, size: number, leftpad: boolean = true): Buffer {
@@ -123,4 +114,10 @@ export function reverseBuffer (buffer: Buffer) {
   }
 
   return reversed;
+}
+
+export function pkToAddress (pk: Buffer) {
+  if (pk.length === 65) pk = pk.slice(1);
+  if (pk.length !== 64) throw new Error('Public key should be 64 or 65 bytes long');
+  return keccak256(pk).slice(-20);
 }

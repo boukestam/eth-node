@@ -1,5 +1,5 @@
 import { RLPxPeer } from "./rlpx-peer";
-import { bufferToInt, intToBuffer } from "./util";
+import { bigIntToBuffer, bufferToInt, intToBuffer } from "./util";
 import { Transaction } from "./transaction";
 import { Block } from "./block";
 import { rlpEncode } from "./rlp";
@@ -176,7 +176,7 @@ export class ETH {
         // start is a hash
         const startHash = startB.toString('hex');
         if (this.blocks.has(startHash)) {
-          start = this.blocks.get(startHash).parsedHeader().number;
+          start = this.blocks.get(startHash).number();
         } else {
           this.send(peer, 0x04, rlpEncode([requestId, []]));
           return;
@@ -212,7 +212,7 @@ export class ETH {
       const block = new Block(raw, );
 
       this.blocks.set(block.hash().toString('hex'), block);
-      this.blocksByNumber.set(block.parsedHeader().number, block);
+      this.blocksByNumber.set(block.number(), block);
 
       for (const hash of block.transactionHashes()) {
         this.removeTransaction(hash.toString('hex'));

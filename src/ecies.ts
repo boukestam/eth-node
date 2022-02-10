@@ -10,7 +10,6 @@ import {
   generatePrivateKey,
   keccak256,
   idToPK,
-  assertEq,
   intToBuffer,
   bufferToInt,
   zfill,
@@ -18,6 +17,17 @@ import {
   keccak256Array
 } from './util'
 import { rlpEncode } from './rlp';
+
+function assertEq(expected: any, actual: any, msg: string): void {
+  if (Buffer.isBuffer(expected) && Buffer.isBuffer(actual)) {
+    if (expected.equals(actual)) return;
+    throw new Error(`${msg}: ${expected.toString('hex')} / ${actual.toString('hex')}`);
+  }
+
+  if (expected === actual) return;
+
+  throw new Error(`${msg}: ${expected} / ${actual}`);
+}
 
 function ecdhX(publicKey: Buffer, privateKey: Buffer) {
   // return (publicKey * privateKey).x
