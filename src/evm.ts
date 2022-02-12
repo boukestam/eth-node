@@ -1,18 +1,13 @@
+import { Account } from "./account";
 import { Block } from "./block";
 import { Transaction } from "./transaction";
 import { bigIntToBuffer, bufferToBigInt, keccak256, keccak256Array } from "./util";
-
-export interface Account {
-  address: Buffer;
-  nonce: Buffer;
-  balance: bigint;
-  code?: Buffer;
-  storage?: {[key: string]: bigint}
-}
+import { WorldState } from "./world-state";
 
 interface Message {
   caller: bigint;
   value: bigint;
+  gas: bigint;
   data: Buffer;
 }
 
@@ -40,12 +35,10 @@ function int256 (n: bigint): bigint {
 
 export class EVM {
 
-  accounts: {
-    [address: string]: Account
-  };
+  worldState: WorldState;
 
-  constructor () {
-    this.accounts = {};
+  constructor (worldState: WorldState) {
+    this.worldState = worldState;
   }
 
   createAddress (addr: Buffer, nonce: Buffer): Buffer {
@@ -53,30 +46,11 @@ export class EVM {
     return hash.slice(-20);
   }
 
-  createAccount (addr: Buffer) {
-    this.accounts[addr.toString('hex')] = {
-      address: addr,
-      nonce: Buffer.alloc(0),
-      balance: 0n
-    };
-  }
-
-  getAccount (addr: bigint): Account {
-    const key = addr.toString(16);
-    if (key in this.accounts) return this.accounts[key];
-
-    return {
-      address: bigIntToBuffer(addr),
-      nonce: Buffer.alloc(0),
-      balance: 0n
-    };
-  }
-
   setCode (addr: Buffer, code: Buffer) {
     this.accounts[addr.toString('hex')].code = code;
   }
 
-  async run (block: Block, transaction: Transaction): Promise<Buffer> {
+  async run (block: Block, transaction: Transaction, message: Message): Promise<Buffer> {
     const bytes = transaction.data();
     
     const account: Account = {
@@ -85,12 +59,6 @@ export class EVM {
       balance: 0n,
       code: bytes,
       storage: {}
-    };
-
-    const msg: Message = {
-      caller: 0x00n,
-      value: 0n,
-      data: bytes
     };
 
     const chainId = 1n;
@@ -351,13 +319,13 @@ export class EVM {
       // CALLER
       else if (byte === 0x33) {
         gas = 2;
-        push(msg.caller);
+        push(message.caller);
       }
 
       // CALLVALUE
       else if (byte === 0x34) {
         gas = 2;
-        push(msg.value);
+        push(message.value);
       }
 
       // CALLDATALOAD
@@ -365,7 +333,7 @@ export class EVM {
         gas = 3;
         const i = pop();
 
-        const value = bufferToBigInt(msg.data.slice(Number(i), Number(i) + 32));
+        const value = bufferToBigInt(message.data.slice(Number(i), Number(i) + 32));
 
         push(value);
       }
@@ -373,7 +341,7 @@ export class EVM {
       // CALLDATASIZE
       else if (byte === 0x36) {
         gas = 2;
-        push(BigInt(msg.data.length / 2));
+        push(BigInt(message.data.length / 2));
       }
 
       // CALLDATACOPY
@@ -384,7 +352,7 @@ export class EVM {
 
         gas = 2 + 3 * Number(length);
 
-        mwrite(destOffset, msg.data.slice(Number(offset), Number(offset) + Number(length)), length);
+        mwrite(destOffset, message.data.slice(Number(offset), Number(offset) + Number(length)), length);
       }
 
       // CODESIZE
