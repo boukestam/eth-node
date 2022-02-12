@@ -1,7 +1,7 @@
 import { bufferToBigInt, intToBuffer } from './util';
 import { Block } from './block';
 import { rlpDecode, rlpEncode } from './rlp';
-import { Trie } from './trie';
+import { MemoryStorage, Trie } from './trie';
 import { Client } from './client';
 import { Worker } from 'worker_threads';
 import { getFullSize, hashimoto } from './ethash';
@@ -24,7 +24,7 @@ async function createStateTrie () {
     const block = await getBlock(blockNumber);
     const transactions = block.transactions();
 
-    const trie = new Trie();
+    const trie = new Trie(new MemoryStorage());
 
     for (let i = 0; i < transactions.length; i++) {
       const key = rlpEncode(i);
