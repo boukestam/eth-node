@@ -39,6 +39,12 @@ export class Transaction {
   )
   origin = () => pkToAddress(this.publicKey());
 
+  intrinsicGas () {
+    const data = this.data();
+    let numZeroBytes = 0;
+    for (const byte of data) if (byte === 0) numZeroBytes++;
+    return 21000 + (data.length * 16) - (numZeroBytes * 12);
+  }
 
   hash () {
     return keccak256(rlpEncode(this.raw));

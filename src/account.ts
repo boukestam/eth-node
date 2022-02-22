@@ -1,4 +1,3 @@
-import { rlpEncode } from "./rlp";
 import { Storage, Trie } from "./trie";
 import { bigIntToBuffer, bufferToBigInt } from "./util";
 
@@ -20,7 +19,9 @@ export class Account {
   storageTrie = (db: Storage) => new Trie(db, this.storageRoot());
   code = async (db: Storage) => await db.get(this.codeHash());
 
+  increaseNonce = () => this.raw[0] = bigIntToBuffer(this.nonce() + 1n);
   setBalance = (balance: bigint) => this.raw[1] = bigIntToBuffer(balance);
+  setStorageRoot = (root: Buffer) => this.raw[2] = root;
 
-  serialize = () => rlpEncode([this.raw]);
+  serialize = () => this.raw;
 }

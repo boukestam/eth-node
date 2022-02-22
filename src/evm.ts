@@ -1,22 +1,13 @@
 import { Account } from "./account";
 import { Block } from "./block";
-import { Transaction } from "./transaction";
 import { bigIntToBuffer, bufferToBigInt, keccak256, keccak256Array } from "./util";
 import { WorldState } from "./world-state";
 
-interface Message {
-  caller: bigint;
-  value: bigint;
-  gas: bigint;
-  data: Buffer;
-}
+const TWO_POW_256 = 2n ** 256n;
 
 type Stack = bigint[];
 type Memory = {
   [key: string]: number
-};
-type Storage = {
-  [key: string]: bigint
 };
 
 interface MemoryWrite {
@@ -33,6 +24,32 @@ function int256 (n: bigint): bigint {
   return BigInt.asIntN(256, n);
 }
 
+interface ExecutionInformation {
+  account: Buffer; // the address of the account which owns the code that is executing.
+  origin: Buffer; // the sender address of the transaction that originated this execution.
+  gasPrice: bigint; // the price of gas in the transaction that originated this execution.
+  callData: Buffer; // the byte array that is the input data to this execution; if the execution agent is a transaction, this would be the transaction data.
+  sender: Buffer; // the address of the account which caused the code to be executing; if the execution agent is a transaction, this would be the transaction sender.
+  value: bigint; // the value, in Wei, passed to this account as part of the same procedure as execution; if the execution agent is a transaction, this would be the transaction value.
+  code: Buffer; // the byte array that is the machine code to be executed.
+  block: Block; // the block header of the present block.
+  callDepth: number; // the depth of the present message-call or contract-creation (i.e. the number of CALLs or CREATE(2)s being executed at present).
+  canModifyState: boolean; // the permission to make modifications to the state.
+}
+
+interface Log {
+  logger: Buffer; // address of the logger
+  topics: Buffer[]; // 32 byte log topics
+  data: Buffer; // log data
+}
+
+interface ExecutionSubstate {
+  selfDestructSet: Buffer[];
+  logSeries: Log[];
+  touchedAccounts: Buffer[];
+  refundBalance: bigint;
+}
+
 export class EVM {
 
   worldState: WorldState;
@@ -41,43 +58,35 @@ export class EVM {
     this.worldState = worldState;
   }
 
-  createAddress (addr: Buffer, nonce: Buffer): Buffer {
-    const hash = keccak256Array([addr, nonce]);
+  createAddress (address: Buffer, nonce: Buffer): Buffer {
+    const hash = keccak256Array([address, nonce]);
     return hash.slice(-20);
   }
 
-  setCode (addr: Buffer, code: Buffer) {
-    this.accounts[addr.toString('hex')].code = code;
+  async getCode (account: Account): Promise<Buffer> {
+    return await this.worldState.db.get(account.codeHash());
   }
 
-  async run (block: Block, transaction: Transaction, message: Message): Promise<Buffer> {
-    const bytes = transaction.data();
-    
-    const account: Account = {
-      address: Buffer.alloc(0),
-      nonce: Buffer.alloc(0),
-      balance: 0n,
-      code: bytes,
-      storage: {}
-    };
+  async create (code: Buffer, value: bigint): Promise<Buffer> {
+    // TODO: implementation
+    return Buffer.alloc(0);
+  }
 
+  async call (remainingGas: number, substate: ExecutionSubstate, info: ExecutionInformation): Promise<{
+    remainingGas: number;
+    substate: ExecutionSubstate;
+    output: Buffer;
+  }> {
     const chainId = 1n;
 
-    // Stack of uin256, max 1024
     const stack: Stack = [];
-
-    // Array of uint8
     const memory: Memory = {};
 
-    // Mapping of uint256 => uint256
-    const storage: Storage = {};
-
-    let pc = -1n;
-    let gasUsed = 0;
+    let pc = -1;
     let result: Buffer = Buffer.alloc(0);
 
-    const push = (n: bigint) => stack.push(uint256(n));
-    const pop = () => uint256(stack.pop() as bigint);
+    const push = (n: bigint) => stack.push(n);
+    const pop = () => stack.pop();
 
     const mread = (offset: bigint, length: bigint): Buffer => {
       const output: number[] = [];
@@ -90,29 +99,15 @@ export class EVM {
       return Buffer.from(output);
     };
 
-    const memoryWrites: MemoryWrite[] = [];
-
     const mwrite = (offset: bigint, bytes: Buffer, length: bigint) => {
       for (let i = 0; i < length; i++) {
         const key = (offset + BigInt(i)).toString(16);
         memory[key] = i < bytes.length ? bytes[i] : 0;
       }
-
-      memoryWrites.push({offset, bytes, length});
     };
 
-    const sread = (n: bigint): bigint => {
-      const key = n.toString(16);
-      return key in storage ? storage[key] : 0n;
-    };
-
-    const swrite = (n: bigint, value: bigint) => {
-      const key = n.toString(16);
-      storage[key] = value;
-    };
-
-    while (pc < bytes.length) {
-      const byte = bytes[Number(++pc)];
+    while (pc < info.code.length) {
+      const byte = info.code[++pc];
       let gas = 0;
 
       // STOP
@@ -142,25 +137,25 @@ export class EVM {
           // ADD
           if (byte === 0x01) {
             gas = 3;
-            push(a + b);
+            push((a + b) % TWO_POW_256);
           }
 
           // MUL
           else if (byte === 0x02) {
             gas = 5;
-            push(a * b);
+            push((a * b) % TWO_POW_256);
           }
 
           // SUB
           else if (byte === 0x03) {
             gas = 3;
-            push(a - b);
+            push((a - b) % TWO_POW_256);
           }
 
           // DIV
           else if (byte === 0x04) {
             gas = 5;
-            push(a / b);
+            push(uint256(a) / uint256(b));
           }
 
           // SDIV
@@ -172,7 +167,7 @@ export class EVM {
           // MOD
           else if (byte === 0x06) {
             gas = 5;
-            push(a % b);
+            push(uint256(a) % uint256(b));
           }
 
           // SMOD
@@ -199,12 +194,14 @@ export class EVM {
           else if (byte === 0x0A) {
             // TODO: Gas calculation
             gas = 10; //b == 0n ? 10 : (10 + 10 * (1 + Math.log(b)) / Math.log(256)));
-            push(a ** b);
+            push((a ** b) % TWO_POW_256);
           }
 
           // SIGNEXTEND
           else if (byte === 0x0B) {
             // TODO: ???
+            const sign = (b >> (a * 8n)) && 0b10000000;
+            // https://jsbin.com/rekijuqede/edit?js,console
           }
 
           // LT
@@ -299,33 +296,34 @@ export class EVM {
       // ADDRESS
       else if (byte === 0x30) {
         gas = 2;
-        push(bufferToBigInt(account.address));
+        push(bufferToBigInt(info.account));
       }
 
       // BALANCE
       else if (byte === 0x31) {
         gas = 400;
-        const addr = pop();
-        const balance = this.getAccount(addr).balance;
+        const address = pop();
+        const account = await this.worldState.getAccount(bigIntToBuffer(address));
+        const balance = account.balance();
         push(balance);
       }
 
       // ORIGIN
       else if (byte === 0x32) {
         gas = 2;
-        push(bufferToBigInt(transaction.origin()));
+        push(bufferToBigInt(info.origin));
       }
 
       // CALLER
       else if (byte === 0x33) {
         gas = 2;
-        push(message.caller);
+        push(bufferToBigInt(info.sender));
       }
 
       // CALLVALUE
       else if (byte === 0x34) {
         gas = 2;
-        push(message.value);
+        push(info.value);
       }
 
       // CALLDATALOAD
@@ -333,7 +331,7 @@ export class EVM {
         gas = 3;
         const i = pop();
 
-        const value = bufferToBigInt(message.data.slice(Number(i), Number(i) + 32));
+        const value = bufferToBigInt(info.callData.slice(Number(i), Number(i) + 32));
 
         push(value);
       }
@@ -341,7 +339,7 @@ export class EVM {
       // CALLDATASIZE
       else if (byte === 0x36) {
         gas = 2;
-        push(BigInt(message.data.length / 2));
+        push(BigInt(info.callData.length / 2));
       }
 
       // CALLDATACOPY
@@ -352,13 +350,13 @@ export class EVM {
 
         gas = 2 + 3 * Number(length);
 
-        mwrite(destOffset, message.data.slice(Number(offset), Number(offset) + Number(length)), length);
+        mwrite(destOffset, info.callData.slice(Number(offset), Number(offset) + Number(length)), length);
       }
 
       // CODESIZE
       else if (byte === 0x38) {
         gas = 2;
-        push(BigInt(account.code?.length || 0));
+        push(BigInt(info.code.length || 0));
       }
 
       // CODECOPY
@@ -369,27 +367,30 @@ export class EVM {
 
         gas = 2 + 3 * Number(length);
 
-        mwrite(destOffset, (account.code || Buffer.alloc(0)).slice(Number(offset), Number(offset) + Number(length)), length);
+        mwrite(destOffset, info.code.slice(Number(offset), Number(offset) + Number(length)), length);
       }
 
       // GASPRICE
       else if (byte === 0x3A) {
         gas = 2;
-        push(transaction.gasPrice());
+        push(info.gasPrice);
       }
 
       // EXTCODESIZE
       else if (byte === 0x3B) {
         gas = 700;
-        const addr = pop();
-        const size = BigInt(this.getAccount(addr).code?.length || 0);
+        const address = pop();
+        const account = await this.worldState.getAccount(bigIntToBuffer(address));
+        const code = await this.getCode(account);
+        const size = BigInt(code.length);
         push(size);
       }
 
       // EXTCODECOPY
       else if (byte === 0x3C) {
-        const addr = pop();
-        const code = this.getAccount(addr).code || Buffer.alloc(0);
+        const address = pop();
+        const account = await this.worldState.getAccount(bigIntToBuffer(address));
+        const code = await this.getCode(account);
 
         const destOffset = pop();
         const offset = pop();
@@ -424,31 +425,31 @@ export class EVM {
       // COINBASE
       else if (byte === 0x41) {
         gas = 2;
-        push(block.coinbase());
+        push(info.block.coinbase());
       }
 
       // TIMESTAMP
       else if (byte === 0x42) {
         gas = 2;
-        push(block.time());
+        push(info.block.time());
       }
 
       // NUMBER
       else if (byte === 0x43) {
         gas = 2;
-        push(BigInt(block.number()));
+        push(BigInt(info.block.number()));
       }
 
       // DIFFICULTY	
       else if (byte === 0x44) {
         gas = 2;
-        push(block.difficulty());
+        push(info.block.difficulty());
       }
 
       // GASLIMIT
       else if (byte === 0x45) {
         gas = 2;
-        push(block.gasLimit());
+        push(info.block.gasLimit());
       }
 
       // CHAINID
@@ -460,7 +461,10 @@ export class EVM {
       // SELFBALANCE
       else if (byte === 0x47) {
         gas = 2;
-        push(account.balance);
+        
+        const account = await this.worldState.getAccount(info.account);
+        const balance = account.balance();
+        push(balance);
       }
 
       // BASEFEE
@@ -503,7 +507,9 @@ export class EVM {
       else if (byte === 0x54) {
         gas = 200;
         const key = pop();
-        push(sread(key));
+        const account = await this.worldState.getAccount(info.account);
+        const value = bufferToBigInt(await this.worldState.getStorageAt(account, key))
+        push(value);
       }
 
       // SSTORE
@@ -512,27 +518,28 @@ export class EVM {
         const value = pop();
 
         gas = ((value != 0n) && (key == 0n)) ? 20000 : 5000;
-        
-        swrite(key, value);
+
+        const account = await this.worldState.getAccount(info.account);
+        await this.worldState.putStorageAt(account, key, bigIntToBuffer(value));
       }
 
       // JUMP
       else if (byte === 0x56) {
         gas = 8;
-        pc = pop();
+        pc = Number(pop());
       }
 
       // JUMPI
       else if (byte === 0x57) {
         gas = 10;
         const destination = pop();
-        if (pop())  pc = destination;
+        if (pop()) pc = Number(destination);
       }
 
       // PC
       else if (byte === 0x58) {
         gas = 2;
-        push(pc);
+        push(BigInt(pc));
       }
 
       // MSIZE
@@ -560,7 +567,7 @@ export class EVM {
 
         const valueBytes: number[] = [];
         for (let i = 0; i < numBytes; i++) {
-          valueBytes.push(bytes[Number(++pc)]);
+          valueBytes.push(info.code[Number(++pc)]);
         }
 
         const value = bufferToBigInt(Buffer.from(valueBytes));
@@ -596,8 +603,79 @@ export class EVM {
 
       // LOG
       else if (byte >= 0xA0 && byte <= 0xA4) {
-        //gas = 375 + 8 * (number of bytes in log data) + 3 * 375;
-        // TODO: implementation
+        const offset = pop();
+        const length = pop();
+        const data = mread(offset, length);
+
+        const numTopics = byte - 0xA0;
+        const topics = [];
+        for (let i = 0; i < numTopics; i++) topics.push(pop());
+
+        gas = 375 + (8 * data.length) + (numTopics * 375);
+        
+        substate.logSeries.push({
+          logger: info.account,
+          topics: topics,
+          data: data
+        });
+      }
+
+      // CREATE
+      else if (byte === 0xF0) {
+        const value = pop();
+        const offset = pop();
+        const length = pop();
+
+        const code = mread(offset, length);
+
+        const address = await this.create(code, value);
+        push(bufferToBigInt(address));
+
+        gas = 32000 + (code.length * 200);
+      }
+
+      // CALL
+      else if (byte === 0xF1) {
+        const callGas = pop();
+        const address = bigIntToBuffer(pop());
+        const value = pop();
+        const argsOffset = pop();
+        const argsLength = pop();
+        const retOffset = pop();
+        const retLength = pop();
+
+        const account = await this.worldState.getAccount(address);
+
+        try {
+          const callInfo: ExecutionInformation = {
+            account: address,
+            origin: info.origin,
+            gasPrice: info.gasPrice,
+            callData: mread(argsOffset, argsLength),
+            sender: info.account,
+            value: value,
+            code: await this.getCode(account),
+            block: info.block,
+            callDepth: info.callDepth + 1,
+            canModifyState: true
+          };
+
+          const result = await this.call(Number(callGas), substate, callInfo);
+
+          mwrite(retOffset, result.output, retLength)
+
+          push(1n);
+        } catch {
+          push(0n);
+        }
+
+        //gas = Number(callGas);
+        // TODO: calculate gas the correct way
+      }
+
+      // CALLCODE
+      else if (byte === 0xF2) {
+
       }
 
       // RETURN
@@ -609,6 +687,21 @@ export class EVM {
         break;
       }
 
+      // DELEGATECALL
+      else if (byte === 0xF4) {
+
+      }
+
+      // CREATE2
+      else if (byte === 0xF5) {
+
+      }
+
+      // STATICCALL
+      else if (byte === 0xFA) {
+
+      }
+
       // REVERT
       else if (byte === 0xFD) {
         const offset = pop();
@@ -618,13 +711,24 @@ export class EVM {
         throw new Error(error.toString());
       }
 
+      // SELFDESTRUCT
+      else if (byte === 0xFF) {
+        substate.selfDestructSet.push(info.account);
+      }
+
       else {
         throw new Error('Unknown opcode ' + byte.toString(16));
       }
 
-      gasUsed += gas;
+      remainingGas -= gas;
+
+      if (remainingGas < 0) throw new Error('Out of gas');
     }
 
-    return result;
+    return {
+      remainingGas: remainingGas,
+      substate: substate,
+      output: result
+    };
   }
 }
